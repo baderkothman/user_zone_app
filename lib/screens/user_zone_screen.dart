@@ -1,5 +1,4 @@
 // lib/screens/user_zone_screen.dart
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -14,26 +13,7 @@ import '../models/app_user.dart';
 import '../routes.dart';
 import '../services/session_manager.dart';
 
-/// UserZoneScreen
-/// --------------
-///
-/// Main screen for **mobile users** after login.
-///
-/// Responsibilities:
-/// - Show the user’s assigned **geofence zone** on a Leaflet map.
-/// - Track the user’s **live GPS location** using `geolocator`.
-/// - Send location updates to the backend via:
-///   - `POST /api/user-location`
-///   - `POST /api/alerts` when exiting the zone.
-/// - Periodically refresh the user’s zone from:
-///   - `GET /api/users/:id` so changes in the admin dashboard are reflected
-///     without restarting the app.
-/// - Provide a **Logout** button that:
-///   - Cancels streams and timers
-///   - Clears the persisted session
-///   - Navigates back to the login screen.
 class UserZoneScreen extends StatefulWidget {
-  /// Authenticated user object obtained after login.
   final AppUser user;
 
   const UserZoneScreen({super.key, required this.user});
@@ -43,29 +23,15 @@ class UserZoneScreen extends StatefulWidget {
 }
 
 class _UserZoneScreenState extends State<UserZoneScreen> {
-  /// Controller for the Flutter Map widget.
   final MapController _mapController = MapController();
 
-  /// Mutable copy of the user so we can update zone fields when the server
-  /// changes them (via periodic refresh).
-  late AppUser _user;
+  late AppUser _user; // mutable copy (zone can be updated server-side)
 
-  /// Last known GPS position from Geolocator.
   Position? _currentPosition;
-
-  /// Subscription to the continuous location stream.
   StreamSubscription<Position>? _positionSub;
-
-  /// Timer used to periodically refresh the user’s zone from the backend.
   Timer? _zoneRefreshTimer;
 
-  /// Whether we currently consider the user inside the geofence.
-  bool _insideZone = true;
-
-  /// Flag to prevent spamming exit alerts when outside the zone.
-  bool _sentExitAlert = false;
-
-  /// Optional status message shown in a bottom card (e.g. permission issues).
+  bool _insideZone = true; // only for UI chip
   String? _statusMessage;
 
   @override
@@ -76,23 +42,14 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
     _startZoneRefreshTimer();
   }
 
-  /// Starts a periodic timer that refreshes the user's zone from the server
-  /// every 10 seconds.
-  ///
-  /// This ensures that if the admin adjusts the zone in the dashboard,
-  /// the app reflects those changes without needing to be restarted.
   void _startZoneRefreshTimer() {
     _zoneRefreshTimer?.cancel();
+    // refresh zone every 10 seconds so user sees updates without restarting app
     _zoneRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _refreshUserZone();
     });
   }
 
-  /// Retrieves the latest user data from:
-  ///   `GET /api/users/:id`
-  ///
-  /// - Updates [_user] with the new zone fields.
-  /// - Optionally recenters the map when the zone becomes available.
   Future<void> _refreshUserZone() async {
     try {
       final uri = Uri.parse('$kBaseUrl/api/users/${_user.id}');
@@ -108,7 +65,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         _user = updated;
       });
 
-      // If a zone was just added, recenter the map on that zone.
+      // Optional: recenter map when zone appears for the first time
       if (_user.zoneLat != null && _user.zoneLng != null) {
         _mapController.move(
           LatLng(_user.zoneLat!, _user.zoneLng!),
@@ -120,15 +77,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
     }
   }
 
-  /// Initializes location tracking:
-  ///
-  /// 1. Verifies that location services are enabled.
-  /// 2. Checks and requests permissions as needed.
-  /// 3. Subscribes to [Geolocator.getPositionStream] with:
-  ///    - `accuracy: LocationAccuracy.high`
-  ///    - `distanceFilter: 5` meters.
-  ///
-  /// Every new position update is passed to [_handlePositionUpdate].
   Future<void> _initLocationTracking() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -173,15 +121,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
     });
   }
 
-  /// Handles each new position update:
-  ///
-  /// - Computes distance from the zone center (if the user has a zone).
-  /// - Determines whether the user is **inside** or **outside** the zone.
-  /// - Transitions:
-  ///   - Outside → Inside: clears exit flag so next exit can trigger alert.
-  ///   - Inside → Outside: sends a one-time "exit" alert.
-  /// - Always calls [_updateLocationOnServer] with the new coordinates and
-  ///   inside/outside status.
   void _handlePositionUpdate(Position pos) {
     final user = _user;
 
@@ -190,11 +129,10 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         user.zoneLng != null &&
         user.zoneRadiusMeters != null;
 
-    double distance = 0;
     bool isInside = false;
 
     if (hasZone) {
-      distance = Geolocator.distanceBetween(
+      final distance = Geolocator.distanceBetween(
         user.zoneLat!,
         user.zoneLng!,
         pos.latitude,
@@ -203,43 +141,23 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
       isInside = distance <= user.zoneRadiusMeters!;
     }
 
+    // UI-only status chip (inside / outside)
     if (hasZone) {
-      if (isInside) {
-        // If we re-enter the zone, reset state and allow future exit alerts.
-        if (!_insideZone) {
-          setState(() {
-            _insideZone = true;
-          });
-          _sentExitAlert = false;
-        }
-      } else {
-        // We have left the zone: send an alert only once per "exit".
-        if (_insideZone && !_sentExitAlert) {
+      if (isInside && !_insideZone) {
+        setState(() {
+          _insideZone = true;
+        });
+      } else if (!isInside && _insideZone) {
+        setState(() {
           _insideZone = false;
-          _sentExitAlert = true;
-          setState(() {});
-          _sendExitAlert(pos, distance);
-        }
+        });
       }
     }
 
-    // Always send updated location to the backend
-    // (insideZone is null if there is no configured zone).
+    // Let the backend handle ENTER / EXIT detection and alert creation
     _updateLocationOnServer(pos, hasZone ? isInside : null);
   }
 
-  /// Sends a location update to:
-  ///   `POST /api/user-location`
-  ///
-  /// Body:
-  /// ```json
-  /// {
-  ///   "userId": <int>,
-  ///   "latitude": <double>,
-  ///   "longitude": <double>,
-  ///   "insideZone": <bool | null>
-  /// }
-  /// ```
   Future<void> _updateLocationOnServer(Position pos, bool? isInside) async {
     try {
       final uri = Uri.parse('$kBaseUrl/api/user-location');
@@ -258,51 +176,14 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
     }
   }
 
-  /// Sends a one-time **EXIT** alert to:
-  ///   `POST /api/alerts`
-  ///
-  /// Body:
-  /// ```json
-  /// {
-  ///   "userId": <int>,
-  ///   "alertType": "exit",
-  ///   "latitude": <double>,
-  ///   "longitude": <double>
-  /// }
-  /// ```
-  ///
-  /// The [distance] parameter is used only for logging.
-  Future<void> _sendExitAlert(Position pos, double distance) async {
-    try {
-      final uri = Uri.parse('$kBaseUrl/api/alerts');
-      await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': _user.id,
-          'alertType': 'exit',
-          'latitude': pos.latitude,
-          'longitude': pos.longitude,
-        }),
-      );
-      debugPrint(
-        'Exit alert sent for user ${_user.username}, distance=$distance',
-      );
-    } catch (e) {
-      debugPrint('Failed to send exit alert: $e');
-    }
-  }
-
-  /// Handles logout:
-  ///
-  /// - Cancels location subscription and zone refresh timer.
-  /// - Clears the persisted session via [SessionManager.clear].
-  /// - Navigates back to the login screen, removing all previous routes.
   Future<void> _handleLogout() async {
+    // Stop tracking & timers
     await _positionSub?.cancel();
     _zoneRefreshTimer?.cancel();
 
+    // Clear persisted session
     await SessionManager.clear();
+    if (!mounted) return;
 
     Navigator.of(
       context,
@@ -322,7 +203,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
     final colorScheme = theme.colorScheme;
 
     final user = _user;
-    const LatLng defaultCenter = LatLng(34.4367, 35.8362);
+    final LatLng defaultCenter = const LatLng(34.4367, 35.8362);
 
     final bool hasZone =
         user.zoneLat != null &&
@@ -333,7 +214,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         ? LatLng(user.zoneLat!, user.zoneLng!)
         : defaultCenter;
 
-    // Markers: one for zone center, one for the user's live location.
     final markers = <Marker>[
       if (hasZone)
         Marker(
@@ -362,7 +242,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         ),
     ];
 
-    // Geofence circle drawn around the zone center.
     final circles = <CircleMarker>[
       if (hasZone)
         CircleMarker(
@@ -388,7 +267,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         ),
         centerTitle: false,
         actions: [
-          // Role pill
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -402,7 +280,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
-          // Logout button
           IconButton(
             tooltip: 'Logout',
             icon: const Icon(Icons.logout, size: 20),
@@ -412,7 +289,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
       ),
       body: Stack(
         children: [
-          // Map layer
+          // Map
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -429,7 +306,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
             ],
           ),
 
-          // Top-left status / zone info
+          // Top-left status / zone card
           Positioned(
             left: 16,
             right: 16,
@@ -437,6 +314,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Zone status chip
                 if (hasZone)
                   Align(
                     alignment: Alignment.centerLeft,
@@ -478,7 +356,7 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
             ),
           ),
 
-          // Bottom status / info card
+          // Bottom status / info
           if (_statusMessage != null)
             Positioned(
               left: 16,
