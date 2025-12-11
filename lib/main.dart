@@ -45,7 +45,6 @@ class UserZoneApp extends StatelessWidget {
         primary: primary,
         secondary: secondary,
         surface: background,
-        background: background,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: background,
