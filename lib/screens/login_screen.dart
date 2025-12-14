@@ -1,5 +1,3 @@
-// lib/screens/login_screen.dart
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,23 +8,6 @@ import '../models/app_user.dart';
 import '../routes.dart';
 import '../services/session_manager.dart';
 
-/// LoginScreen
-/// -----------
-///
-/// Entry point for **mobile users**.
-///
-/// Responsibilities:
-/// - Collect username and password.
-/// - Call `POST /api/user-login` on the Next.js backend.
-/// - Parse the returned user payload into [AppUser].
-/// - Persist the user using [SessionManager.saveUser] so that future launches
-///   can skip the login step.
-/// - Navigate to the **User Zone** screen on success.
-///
-/// UI / UX:
-/// - Dark card centered on the screen (mirrors the admin dashboard feel).
-/// - Password show/hide toggle.
-/// - Clear error banner for failed login.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -35,29 +16,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  /// Controllers for the username and password text fields.
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
-  /// Whether the login request is in progress.
   bool _loading = false;
-
-  /// Controls whether the password is visible or obscured.
   bool _obscurePassword = true;
-
-  /// Optional error message shown above the button when login fails.
   String? _error;
-
-  /// Performs the login flow:
-  ///
-  /// 1. Sends `POST /api/user-login` with JSON body:
-  ///    `{ "username": "...", "password": "..." }`.
-  /// 2. If the response is successful and `success == true`:
-  ///    - Builds an [AppUser] from `data["user"]`.
-  ///    - Saves that user using [SessionManager.saveUser].
-  ///    - Navigates to the **User Zone** screen, replacing the login screen.
-  /// 3. On error:
-  ///    - Sets an error message to be displayed in the UI.
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -86,17 +49,11 @@ class _LoginScreenState extends State<LoginScreen> {
         });
         return;
       }
-
-      // Parse user payload returned from the backend.
       final userJson = data['user'] as Map<String, dynamic>;
       final user = AppUser.fromJson(userJson);
-
-      // Persist session so next app launch can restore the user.
       await SessionManager.saveUser(user);
 
       if (!mounted) return;
-
-      // Navigate to the user zone screen, replacing the login screen.
       Navigator.of(
         context,
       ).pushReplacementNamed(Routes.userZone, arguments: user);
@@ -136,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                // Matches the dark surfaces used in the dashboard.
                 color: const Color(0xFF020617).withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: const Color(0xFF1E293B)),
@@ -151,7 +107,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Icon / app identity
                   Icon(
                     Icons.location_on,
                     size: 48,
@@ -168,8 +123,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                   ),
                   const SizedBox(height: 24),
-
-                  // Username field
                   TextField(
                     controller: _usernameController,
                     decoration: const InputDecoration(
@@ -178,8 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Password field with show/hide toggle
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
@@ -201,8 +152,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Error banner (if any)
                   if (_error != null)
                     Container(
                       width: double.infinity,
@@ -221,8 +170,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
-                  // Primary action button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

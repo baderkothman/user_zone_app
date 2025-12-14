@@ -1,4 +1,3 @@
-// lib/screens/user_zone_screen.dart
 import 'dart:async';
 import 'dart:convert';
 
@@ -44,7 +43,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
 
   void _startZoneRefreshTimer() {
     _zoneRefreshTimer?.cancel();
-    // refresh zone every 10 seconds so user sees updates without restarting app
     _zoneRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _refreshUserZone();
     });
@@ -64,8 +62,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
       setState(() {
         _user = updated;
       });
-
-      // Optional: recenter map when zone appears for the first time
       if (_user.zoneLat != null && _user.zoneLng != null) {
         _mapController.move(
           LatLng(_user.zoneLat!, _user.zoneLng!),
@@ -140,8 +136,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
       );
       isInside = distance <= user.zoneRadiusMeters!;
     }
-
-    // UI-only status chip (inside / outside)
     if (hasZone) {
       if (isInside && !_insideZone) {
         setState(() {
@@ -153,8 +147,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
         });
       }
     }
-
-    // Let the backend handle ENTER / EXIT detection and alert creation
     _updateLocationOnServer(pos, hasZone ? isInside : null);
   }
 
@@ -177,11 +169,8 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
   }
 
   Future<void> _handleLogout() async {
-    // Stop tracking & timers
     await _positionSub?.cancel();
     _zoneRefreshTimer?.cancel();
-
-    // Clear persisted session
     await SessionManager.clear();
     if (!mounted) return;
 
@@ -289,7 +278,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
       ),
       body: Stack(
         children: [
-          // Map
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -305,8 +293,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
               if (markers.isNotEmpty) MarkerLayer(markers: markers),
             ],
           ),
-
-          // Top-left status / zone card
           Positioned(
             left: 16,
             right: 16,
@@ -314,7 +300,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Zone status chip
                 if (hasZone)
                   Align(
                     alignment: Alignment.centerLeft,
@@ -355,8 +340,6 @@ class _UserZoneScreenState extends State<UserZoneScreen> {
               ],
             ),
           ),
-
-          // Bottom status / info
           if (_statusMessage != null)
             Positioned(
               left: 16,
