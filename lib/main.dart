@@ -6,20 +6,34 @@ import 'screens/user_zone_screen.dart';
 import 'services/session_manager.dart';
 import 'models/app_user.dart';
 
+/// main()
+/// ======
+/// Boots the Flutter app and loads the root widget.
+///
+/// This app uses a small “session gate”:
+/// - If a saved user exists in SharedPreferences -> open UserZoneScreen
+/// - Otherwise -> open LoginScreen
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const UserZoneApp());
 }
 
+/// UserZoneApp
+/// ===========
+/// MaterialApp configuration:
+/// - Dark theme (Material 3)
+/// - Centralized onGenerateRoute routing
+/// - Session-gated home screen
 class UserZoneApp extends StatelessWidget {
   const UserZoneApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const background = Color(0xFF020617); // very dark navy
-    const foreground = Color(0xFFE5E7EB); // light gray text
-    const primary = Color(0xFF4F46E5); // indigo accent
-    const secondary = Color(0xFF22C55E); // emerald accent (status / success);
+    // This theme is intentionally “dark-first” to match map UI and overlay cards.
+    const background = Color(0xFF020617);
+    const foreground = Color(0xFFE5E7EB);
+    const primary = Color(0xFF4F46E5);
+    const secondary = Color(0xFF22C55E);
 
     final theme = ThemeData(
       useMaterial3: true,
@@ -87,6 +101,10 @@ class UserZoneApp extends StatelessWidget {
   }
 }
 
+/// _SessionGate
+/// ============
+/// Startup gate that checks for a saved session user.
+/// This prevents the app from showing login every time it restarts.
 class _SessionGate extends StatefulWidget {
   const _SessionGate();
 
@@ -118,6 +136,7 @@ class _SessionGateState extends State<_SessionGate> {
         if (user == null) {
           return const LoginScreen();
         }
+
         return UserZoneScreen(user: user);
       },
     );

@@ -8,6 +8,23 @@ import '../models/app_user.dart';
 import '../routes.dart';
 import '../services/session_manager.dart';
 
+/// LoginScreen
+/// ===========
+/// User authentication screen for the Flutter mobile app.
+///
+/// Backend communication:
+/// - POST {kBaseUrl}/api/user-login
+///
+/// Expected backend response:
+/// - 200 OK:
+///   { "success": true, "user": { id, username, role, zone_center_lat, ... } }
+/// - Non-200 or success=false:
+///   { "success": false, "message": "..." }
+///
+/// On success:
+/// - Parses the returned user object into AppUser
+/// - Persists the user locally via SessionManager
+/// - Navigates to UserZoneScreen
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -18,9 +35,19 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _loading = false;
   bool _obscurePassword = true;
   String? _error;
+
+  /// Performs a login request against the backend.
+  ///
+  /// This is intentionally simple:
+  /// - No token storage
+  /// - No refresh logic
+  /// - The “session” is the locally stored user object
+  ///
+  /// In production, consider proper auth (JWT/session) and secure storage.
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -41,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final data = jsonDecode(res.body);
 
+      // Treat both HTTP errors and API-level failures uniformly for the user.
       if (res.statusCode != 200 || data['success'] != true) {
         setState(() {
           _error =
@@ -49,11 +77,16 @@ class _LoginScreenState extends State<LoginScreen> {
         });
         return;
       }
+
+      // The backend returns the user object under `user`.
       final userJson = data['user'] as Map<String, dynamic>;
       final user = AppUser.fromJson(userJson);
+
+      // Persist locally so the app can skip login on restart.
       await SessionManager.saveUser(user);
 
       if (!mounted) return;
+
       Navigator.of(
         context,
       ).pushReplacementNamed(Routes.userZone, arguments: user);
